@@ -864,6 +864,29 @@ static char *parse_service_option(CMD cmd, SERVICE_OPTIONS *section,
         break;
     }
 
+    /* sendproxy */
+    switch(cmd) {
+    case CMD_INIT:
+        section->option.sendproxy=0;
+        break;
+    case CMD_EXEC:
+        if(strcasecmp(opt, "sendproxy"))
+            break;
+        if(!strcasecmp(arg, "yes"))
+            section->option.sendproxy=1;
+        else if(!strcasecmp(arg, "no"))
+            section->option.sendproxy=0;
+        else
+            return "argument should be either 'yes' or 'no'";
+        return NULL; /* OK */
+    case CMD_DEFAULT:
+        break;
+    case CMD_HELP:
+        s_log(LOG_NOTICE, "%-15s = yes|no append proxy prefix",
+            "sendproxy");
+        break;
+    }
+
     /* exec */
     switch(cmd) {
     case CMD_INIT:

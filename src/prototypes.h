@@ -178,6 +178,7 @@ typedef struct service_options_struct {
         unsigned int retry:1; /* loop remote+program */
         unsigned int sessiond:1;
         unsigned int program:1;
+        unsigned int sendproxy:1;
 #ifndef USE_WIN32
         unsigned int pty:1;
         unsigned int transparent_src:1;
@@ -348,6 +349,7 @@ typedef struct {
 
     char sock_buff[BUFFSIZE]; /* socket read buffer */
     char ssl_buff[BUFFSIZE]; /* SSL read buffer */
+    int sendproxy;
     int sock_ptr, ssl_ptr; /* index of first unused byte in buffer */
     FD *sock_rfd, *sock_wfd; /* read and write socket descriptors */
     FD *ssl_rfd, *ssl_wfd; /* read and write SSL descriptors */

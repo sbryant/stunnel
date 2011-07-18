@@ -94,6 +94,8 @@ CLI *alloc_client_session(SERVICE_OPTIONS *opt, int rfd, int wfd) {
     c->crlf_seen=0;
     c->local_rfd.fd=rfd;
     c->local_wfd.fd=wfd;
+    if (c->opt->option.sendproxy)
+        c->sendproxy = 1;
     return c;
 }
 
@@ -584,7 +586,73 @@ static void transfer(CLI *c) {
                 watchdog=0; /* reset watchdog */
             }
         }
-
+ 	if (c->sendproxy && !c->ssl_ptr) {
+ 		int cfd;
+ 		struct sockaddr_storage local_addr;
+ 		struct sockaddr_storage peer_addr;
+ 		u_char family = AF_UNSPEC;
+ 
+ 		cfd = SSL_get_fd(c->ssl);
+ 		if (cfd != -1) {
+ 			size_t namelen;
+ 
+ 			namelen = sizeof(local_addr);
+ 			if (!getsockname(cfd, (struct sockaddr *)&local_addr, &namelen)) {
+ 				namelen = sizeof(peer_addr);
+ 				if (!getpeername(cfd, (struct sockaddr *)&peer_addr, &namelen))
+ 					family = peer_addr.ss_family;
+ 			}
+ 		}
+ 
+ 		if (family == AF_INET) {
+ 
+ 			if (BUFFSIZE >= 11) {
+ 				memcpy(c->ssl_buff, "PROXY TCP4 ", 11);
+ 				c->ssl_ptr += 11;
+ 			}
+ 
+ 			if (inet_ntop(peer_addr.ss_family, &((struct sockaddr_in*)&peer_addr)->sin_addr, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr)) {
+ 				c->ssl_ptr += strlen(c->ssl_buff+c->ssl_ptr);
+ 			}
+ 			if (c->ssl_ptr != BUFFSIZE) {
+ 				c->ssl_buff[c->ssl_ptr] = ' ';
+ 				c->ssl_ptr++;
+ 			}
+ 			if (inet_ntop(local_addr.ss_family, &((struct sockaddr_in*)&local_addr)->sin_addr, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr)) {
+ 				c->ssl_ptr += strlen(c->ssl_buff+c->ssl_ptr);
+ 			}
+ 			c->ssl_ptr += snprintf(c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr, " %u %u\r\n", ntohs(((struct sockaddr_in*)&peer_addr)->sin_port), ntohs(((struct sockaddr_in*)&local_addr)->sin_port));
+ 		}
+ #if defined(USE_IPv6) && !defined(USE_WIN32)			
+ 		else if (family == AF_INET6) {
+ 
+ 			if (BUFFSIZE >= 11) {
+                                 memcpy(c->ssl_buff, "PROXY TCP6 ", 11);
+                                 c->ssl_ptr += 11;
+                         }
+ 
+                         if (inet_ntop(peer_addr.ss_family, &((struct sockaddr_in6*)&peer_addr)->sin6_addr, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr)) {
+                                 c->ssl_ptr += strlen(c->ssl_buff+c->ssl_ptr);
+                         }
+                         if (c->ssl_ptr != BUFFSIZE) {
+                                 c->ssl_buff[c->ssl_ptr] = ' ';
+                                 c->ssl_ptr++;
+                         }
+                         if (inet_ntop(local_addr.ss_family, &((struct sockaddr_in6*)&local_addr)->sin6_addr, c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr)) {
+                                 c->ssl_ptr += strlen(c->ssl_buff+c->ssl_ptr);
+                         }
+                         c->ssl_ptr += snprintf(c->ssl_buff+c->ssl_ptr, BUFFSIZE-c->ssl_ptr, " %u %u\r\n", ntohs(((struct sockaddr_in6*)&peer_addr)->sin6_port), ntohs(((struct sockaddr_in6*)&local_addr)->sin6_port));
+ 		}
+ #endif
+ 		else {
+ 			if (BUFFSIZE >= 15) {
+                                 memcpy(c->ssl_buff, "PROXY UNKNOWN\r\n ", 15);
+                                 c->ssl_ptr += 15;
+                         }
+ 		}
+ 		c->sendproxy = 0;
+ 	}
+ 		
         /****************************** write to socket */
         if(sock_open_wr && sock_can_wr) {
             num=writesocket(c->sock_wfd->fd, c->ssl_buff, c->ssl_ptr);
